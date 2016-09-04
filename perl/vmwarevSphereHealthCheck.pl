@@ -127,6 +127,7 @@ my (@vmw_apps,@perf_host_list,@vms_perf,@hosts_in_cluster,@portgroups_in_cluster
 my (%hostlists,%vmlists,%configurations,%vmmac_to_portgroup_mapping,%vswitch_portgroup_mappping,%lun_row_info,%luns,%datastore_row_info,%datastores,%portgroup_row_info,%seen_dvs) = ();
 my ($hardwareConfigurationString,$stateString,$hostString,$healthHardwareString,$healthSoftwareString,$nicString,$configString,$hbaString,$cdpString,$lunString,$datastoreString,$cacheString,$portgroupString,$multipathString,$dvsString,$logString,$taskString,$numaString,$hostPerfString,$vmString,$vmstateString,$vmconfigString,$vmstatString,$vmftString,$vmeztString,$vmtoolString,$vmstorageString,$vmnetworkString,$vmthinString,$vmPerfString,$vmsnapString,$vmcdString,$vmflpString,$vmrdmString,$vmdeltaString,$vmnpivString,$advString,$agentString,$mgmtString,$vmrscString,$capString,$vmdeviceString,$iscsiString) = ("","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","","");
 my (@datastore_cluster_jump_tags,@cluster_jump_tags,@host_jump_tags,@vm_jump_tags) = ();
+my ($hostHasIssues, $hostHasIssues_details) = ("no","");
 
 ###############
 # COLORS
@@ -289,7 +290,7 @@ Util::disconnect();
 #####################
 
 sub emailReport {
-	if($email eq "yes") {
+	if($email eq "yes" and $hostHasIssues ne "no") {
 		my $smtp = Net::SMTP->new($EMAIL_HOST ,Hello => $EMAIL_DOMAIN,Timeout => 30,);
 
 		unless($smtp) {
@@ -310,12 +311,15 @@ sub emailReport {
         	$smtp->datasend('From: '.$EMAIL_FROM."\n");
 	        $smtp->datasend('To: '.@EMAIL_TO."\n");
         	$smtp->datasend('Subject: VMware vSphere Health Check Report Completed - '.giveMeDate('MDYHMS'). " (" . $system_name . ")\n");
+        	$smtp->datasend("Date: " .giveMeDate('MDYHMS') . "\n");
 	        $smtp->datasend("MIME-Version: 1.0\n");
         	$smtp->datasend("Content-type: multipart/mixed;\n\tboundary=\"$boundary\"\n");
 	        $smtp->datasend("\n");
 	        $smtp->datasend("--$boundary\n");
         	$smtp->datasend("Content-type: text/plain\n");
 	        $smtp->datasend("Content-Disposition: quoted-printable\n");
+	        $smtp->datasend("\nProblems have been detected with the following\n");
+	        $smtp->datasend("\n$hostHasIssues_details\n");
 	        $smtp->datasend("\nReport $report is attached!\n");
 	        $smtp->datasend("--$boundary\n");
 	        $smtp->datasend("Content-Type: application/text; name=\"$report\"\n");
@@ -339,6 +343,8 @@ sub getServiceInfo {
 
 sub getSystemSummary {
 	my ($sc,$htype,$atype,$aversion) = @_;
+	
+	no warnings 'uninitialized';
 
 	my $summary_start = "<div id=\"tab1\" class=\"content\">\n";
 
@@ -1920,6 +1926,7 @@ sub printHostSummary {
                                                         	elsif ($sensor_health_color =~ m/yellow/i) { $sensor_health_color="<td bgcolor=\"$yellow\">WARNING</td>"; }
                                                         	else { $sensor_health_color="<td bgcolor=\"gray\">UNKNOWN</td>"; }
 								$healthHardwareString .= "<tr><td>".$_->name."</td>".$sensor_health_color."</tr>\n";
+								if ($sensor_health !~ m/green/i) { $hostHasIssues="yes"; $hostHasIssues_details .= $_->name."\n"; }
 							}
 						}
 						if($hardwareStatusInfo->memoryStatusInfo) {
@@ -1931,6 +1938,7 @@ sub printHostSummary {
                                                                 elsif ($sensor_health_color =~ m/yellow/i) { $sensor_health_color="<td bgcolor=\"$yellow\">WARNING</td>"; }
                                                                 else { $sensor_health_color="<td bgcolor=\"gray\">UNKNOWN</td>"; }
                                                                 $healthHardwareString .= "<tr><td>".$_->name."</td>".$sensor_health_color."</tr>\n";
+                                                                if ($sensor_health !~ m/green/i) { $hostHasIssues="yes"; $hostHasIssues_details .= $_->name."\n"; }
 							}
 						}
 						if($hardwareStatusInfo->storageStatusInfo) {
@@ -1942,6 +1950,7 @@ sub printHostSummary {
                                                                 elsif ($sensor_health_color =~ m/yellow/i) { $sensor_health_color="<td bgcolor=\"$yellow\">WARNING</td>"; }
                                                                 else { $sensor_health_color="<td bgcolor=\"gray\">UNKNOWN</td>"; }
                                                                 $healthHardwareString .= "<tr><td>".$_->name."</td>".$sensor_health_color."</tr>\n";
+                                                                if ($sensor_health !~ m/green/i) { $hostHasIssues="yes"; $hostHasIssues_details .= $_->name."\n"; }
 							}
 						}
 					}
@@ -1963,6 +1972,7 @@ sub printHostSummary {
 								$reading =  &restrict_num_decimal_digits(($_->currentReading * (10 ** $_->unitModifier)),3) . " " . $_->baseUnits;
 							}
 							$healthSoftwareString .= "<tr><td>".$_->name."</td><td>".$reading."</td>".$sensor_health_color."</tr>\n";
+							if ($sensor_health !~ m/green/i) { $hostHasIssues="yes"; $hostHasIssues_details .= $_->name."\n"; }
 						}
 					}
 				}
